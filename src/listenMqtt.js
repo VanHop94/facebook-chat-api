@@ -114,63 +114,65 @@ function listenMqtt(defaultFuncs, api, ctx, globalCallback) {
   });
 
   mqttClient.on('message', function(topic, message, packet) {
-    var jsonMessage;
+    var jsonMessage, err;
     try {
       jsonMessage = JSON.parse(message);
     } catch (e) {
-      var err = {
+      err = {
         message: message,
         error: 'Can not parse message'
       };
-      (function () { globalCallback(err, null); })();
-      return;
     }
-    if(topic === "/t_ms") {
-      if(jsonMessage.firstDeltaSeqId && jsonMessage.syncToken) {
-        ctx.lastSeqId = jsonMessage.firstDeltaSeqId;
-        ctx.syncToken = jsonMessage.syncToken;
-      }
 
-      if(jsonMessage.lastIssuedSeqId) {
-        ctx.lastSeqId = parseInt(jsonMessage.lastIssuedSeqId);
-      }
+    if (err) {
+      (function () { globalCallback(err, null); })();
+    } else {
+      if(topic === "/t_ms") {
+        if(jsonMessage.firstDeltaSeqId && jsonMessage.syncToken) {
+          ctx.lastSeqId = jsonMessage.firstDeltaSeqId;
+          ctx.syncToken = jsonMessage.syncToken;
+        }
 
-      if(jsonMessage.queueEntityId && ctx.globalOptions.pageID &&
-        ctx.globalOptions.pageID != jsonMessage.queueEntityId) {
-        return;
-      }
+        if(jsonMessage.lastIssuedSeqId) {
+          ctx.lastSeqId = parseInt(jsonMessage.lastIssuedSeqId);
+        }
 
-      //If it contains more than 1 delta
-      for (var i in jsonMessage.deltas) {
-        var delta = jsonMessage.deltas[i];
-        parseDelta(defaultFuncs, api, ctx, globalCallback, { "delta": delta });
-      }
-    } else if (topic === "/thread_typing" || topic === "/orca_typing_notifications") {
-      var typ = {
-        type: "typ",
-        isTyping: !!jsonMessage.state,
-        from: jsonMessage.sender_fbid.toString(),
-        threadID: utils.formatID((jsonMessage.thread || jsonMessage.sender_fbid).toString())
-      };
-      (function () { globalCallback(null, typ); })();
-    } else if (topic === "/orca_presence") {
-      if (!ctx.globalOptions.updatePresence) {
-        for (var i in jsonMessage.list) {
-          var data = jsonMessage.list[i];
-          var userID = data["u"];
+        if(jsonMessage.queueEntityId && ctx.globalOptions.pageID &&
+            ctx.globalOptions.pageID != jsonMessage.queueEntityId) {
+          return;
+        }
 
-          var presence = {
-            type: "presence",
-            userID: userID.toString(),
-            //Convert to ms
-            timestamp: data["l"] * 1000,
-            statuses: data["p"]
-          };
-          (function () { globalCallback(null, presence); })();
+        //If it contains more than 1 delta
+        for (var i in jsonMessage.deltas) {
+          var delta = jsonMessage.deltas[i];
+          parseDelta(defaultFuncs, api, ctx, globalCallback, { "delta": delta });
+        }
+      } else if (topic === "/thread_typing" || topic === "/orca_typing_notifications") {
+        var typ = {
+          type: "typ",
+          isTyping: !!jsonMessage.state,
+          from: jsonMessage.sender_fbid.toString(),
+          threadID: utils.formatID((jsonMessage.thread || jsonMessage.sender_fbid).toString())
+        };
+        (function () { globalCallback(null, typ); })();
+      } else if (topic === "/orca_presence") {
+        if (!ctx.globalOptions.updatePresence) {
+          for (var i in jsonMessage.list) {
+            var data = jsonMessage.list[i];
+            var userID = data["u"];
+
+            var presence = {
+              type: "presence",
+              userID: userID.toString(),
+              //Convert to ms
+              timestamp: data["l"] * 1000,
+              statuses: data["p"]
+            };
+            (function () { globalCallback(null, presence); })();
+          }
         }
       }
     }
-
   });
 
   mqttClient.on('close', function() {
